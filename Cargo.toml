@@ -1,0 +1,18 @@
+[package]
+name = "prproj"
+version = "0.1.0"
+authors = ["Jakub Koralewski <contact@jcubed.me>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+# Unpacking gzip
+libflate = "0.1.27"
+# Parsing XML
+minidom = "0.11.1"
+# Easy tuple destructuring when searching for elements
+# fixes nested match statements
+itertools = "0.8.1"
+# For storing duration which can be very big
+# num-bigint = "0.2"
