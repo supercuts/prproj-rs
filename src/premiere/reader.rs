@@ -2,7 +2,7 @@ use std::cell::{RefCell, RefMut};
 use crate::element::{Element, ElementGetExt};
 
 /// https://docs.rs/libflate/0.1.16/libflate/gzip/index.html
-use libflate::gzip::Decoder;
+use libflate::gzip;
 use std::io::Read;
 
 use std::collections::HashMap;
@@ -19,10 +19,11 @@ use std::fs::File;
 #[derive(Debug)]
 /// Reads data and produces sequences, media.
 /// ```
-/// use std::path::Path;
+/// use std::path::{Path, PathBuf};
 /// use prproj::PremiereReader;
+/// let xml_file: PathBuf = ["tests", "test.unzipped.prproj"].iter().collect();
 ///
-/// let mut reader = PremiereReader::from_path(&Path::new(XML_FILE));
+/// let mut reader = PremiereReader::from_path(&Path::new(&xml_file));
 ///	if let Err(err) = reader.read() {
 ///        println!("Error reading Premiere Pro file: {}\n{:#?}!", err, err)
 /// }
@@ -35,6 +36,8 @@ pub struct PremiereReader {
 	root: Element,
 }
 
+/// Used to map the Sequence ID to a Vector of TrackGroup
+/// ObjectRef.
 type HashMapWithVector = HashMap<usize, Vec<String>>;
 
 trait HashMapLengthWithVector {
@@ -60,10 +63,10 @@ impl PremiereReader {
 		let to_str = |bytes: &[u8]|
 			String::from_utf8(bytes.to_vec()).unwrap();
 
-		if xml[0..2].to_vec() == [0x1f, 0x8b] {
+		if xml.iter().take(2).eq([0x1f, 0x8b].iter()) {
 			let mut buf = Vec::new();
 			// https://docs.rs/libflate/0.1.27/libflate/gzip/struct.Decoder.html
-			let mut decoder = Decoder::new(xml).unwrap();
+			let mut decoder = gzip::Decoder::new(xml).unwrap();
 			decoder.read_to_end(&mut buf).unwrap();
 			Self {
 				root: to_str(&buf).parse().expect("XML parsing unzipped error"),
@@ -79,6 +82,16 @@ impl PremiereReader {
 		}
 	}
 
+	pub fn read(&mut self) -> Result<(), NotFoundError> {
+		let references: HashMapWithVector = Self::get_sequences(&self.root, &mut self.sequences)?;
+		// Non-lexical lifetime in Vec!
+		// https://rust-lang.github.io/rfcs/2094-nll.html#problem-case-3-conditional-control-flow-across-functions
+		// https://github.com/rust-lang/rust/issues/21906#issuecomment-73296543
+		// https://stackoverflow.com/questions/58295535/cannot-borrow-self-as-mutable-more-than-once-at-a-time-when-returning-a-resul
+		// https://stackoverflow.com/questions/38023871/returning-a-reference-from-a-hashmap-or-vec-causes-a-borrow-to-last-beyond-the-s
+		self.resolve_groups(&references)
+	}
+
 	pub fn from_path(path: &Path) -> Self {
 		let mut buffer: Vec<u8> = Vec::new();
 		let mut file = File::open(Path::new(path)).unwrap();
@@ -86,10 +99,13 @@ impl PremiereReader {
 		PremiereReader::new(&buffer)
 	}
 
+	/// Searches for sequences which are direct children of the `self.root`.
+	/// Once it finds one, pushes a `PremiereSequence` to `sequences`.
+	/// Returns `HashMapWithVector`.
 	fn get_sequences(root: &Element, sequences: &mut PremiereSequences)
-	                 -> Result<HashMap<usize, Vec<String>>, NotFoundError>
+	                 -> Result<HashMapWithVector, NotFoundError>
 	{
-		let mut references: HashMap<usize, Vec<String>> = HashMap::new();
+		let mut references: HashMapWithVector = HashMap::new();
 		for child in root.children() {
 			if child.name() == "Sequence" {
 				println!("<Sequence ObjectUID={:?}>", child.attr("ObjectUID").unwrap());
@@ -102,24 +118,20 @@ impl PremiereReader {
 		Ok(references)
 	}
 
-	pub fn read(&mut self) -> Result<(), NotFoundError> {
-		let references = Self::get_sequences(&self.root, &mut self.sequences)?;
-		// Non-lexical lifetime in Vec!
-		// https://rust-lang.github.io/rfcs/2094-nll.html#problem-case-3-conditional-control-flow-across-functions
-		// https://github.com/rust-lang/rust/issues/21906#issuecomment-73296543
-		// https://stackoverflow.com/questions/58295535/cannot-borrow-self-as-mutable-more-than-once-at-a-time-when-returning-a-resul
-		// https://stackoverflow.com/questions/38023871/returning-a-reference-from-a-hashmap-or-vec-causes-a-borrow-to-last-beyond-the-s
-		self.resolve_groups(&references)
-	}
 
-	fn parse_video_track_group(&self, vtg: &minidom::element::Element, mut seq: RefMut<PremiereSequence>) -> Result<(), NotFoundError> {
+	fn parse_video_track_group(
+		&self,
+		vtg: &minidom::element::Element,
+		mut seq: RefMut<PremiereSequence>
+	) -> Result<(), NotFoundError> {
+
 		let (frame_rect_elem, track_group_elem) =
 			Self::get_elems_with_names(
 				vtg,
 				&sorted_vec!["FrameRect", "TrackGroup"],
 			).into_iter().tuples().next().unwrap();
 
-// <FrameRect>0,0,1920,1080</FrameRect>
+		// <FrameRect>0,0,1920,1080</FrameRect>
 		let frame_rect_text =
 			frame_rect_elem.text();
 
@@ -143,7 +155,7 @@ impl PremiereReader {
 		}
 		for track_ref in track_refs {
 			let track_items: &Element
-// VideoClipTrack or AudioClipTrack so can't set name
+				// VideoClipTrack or AudioClipTrack so can't set name
 				= self.get_elem_with_id(track_ref, track_refs_found_with.clone())?
 				.get("ClipTrack")?
 				.get("ClipItems")?
@@ -168,7 +180,7 @@ impl PremiereReader {
 
 				let (end_elem, start_elem) = Self::get_elems_with_names(
 					track_item_elem,
-					&sorted_vec!["End", "Start"], //TODO: create sorted vector macro
+					&sorted_vec!["End", "Start"],
 				).into_iter().tuples().next().unwrap();
 
 				let sub_clip = self.get_elem_with_id(

@@ -17,6 +17,9 @@ itertools = "0.8.1"
 # For storing duration which can be very big
 # num-bigint = "0.2"
 
-[[example]]
-name = "example"
-path = "examples/example.rs"
+[dev-dependencies]
+lazy_static = "1.4.0"
+
+#[[example]]
+#name = "example"
+#path = "examples/example.rs"
