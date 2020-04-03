@@ -1,0 +1,78 @@
+#[macro_use]
+extern crate lazy_static;
+
+#[cfg(target_arch = "wasm32")]
+extern crate wasm_bindgen_test;
+
+use prproj::PremiereReader;
+#[cfg(not(target_arch = "wasm32"))]
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+#[cfg(target_arch = "wasm32")]
+use wasm_bindgen_test::*;
+
+#[cfg(not(target_arch = "wasm32"))]
+lazy_static! {
+    static ref HERE: PathBuf = std::env::current_dir().unwrap();
+
+    static ref XML_FILE: PathBuf = {
+        let mut here = HERE.clone();
+        here.push(["tests", "test.unzipped.prproj"].iter().collect::<PathBuf>());
+        here
+    };
+    static ref GZ_FILE: PathBuf = {
+        let mut here = HERE.clone();
+        here.push(["tests", "test.zipped.prproj"].iter().collect::<PathBuf>());
+        here
+    };
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn read(path: &Path) {
+	let before = Instant::now();
+	let mut reader =
+		PremiereReader::from_path(&Path::new(path));
+
+	if let Err(err) = reader.read() {
+		println!("Error reading Premiere Pro file: {}\n{:#?}!", err, err)
+	}
+	println!("Time to read: {:#?}", Instant::now() - before);
+	println!("Sequences: {:#?}", reader.sequences());
+	println!("Media: {:#?}", reader.media());
+}
+
+#[cfg(target_arch = "wasm32")]
+lazy_static! {
+    static ref XML_FILE: &'static [u8] = include_bytes!("../tests/test.unzipped.prproj");
+    static ref GZ_FILE: &'static [u8] = include_bytes!("../tests/test.zipped.prproj");
+}
+
+#[cfg(target_arch = "wasm32")]
+fn read(path: &[u8]) {
+	let before = Instant::now();
+	let mut reader = PremiereReader::new(path);
+
+	if let Err(err) = reader.read() {
+		println!("Error reading Premiere Pro file: {}\n{:#?}!", err, err)
+	}
+	println!("Time to read: {:#?}", Instant::now() - before);
+	println!("Sequences: {:#?}", reader.sequences());
+	println!("Media: {:#?}", reader.media());
+}
+
+// #[cfg_attr(not(target_arch = "wasm32"), test)]
+// #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+// fn it_reads_xml_without_errors() {
+// 	read(&*XML_FILE);
+// }
+
+// #[cfg_attr(not(target_arch = "wasm32"), test)]
+// #[cfg_attr(target_arch = "wasm32", wasm_bindgen_test)]
+// fn it_reads_gzip_without_errors() {
+// 	read(&*GZ_FILE);
+// }
+
+
+
+

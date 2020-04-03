@@ -2,6 +2,11 @@ use std::fmt;
 use crate::element::Element;
 
 #[derive(Debug)]
+pub enum Error {
+	NotFound(NotFoundError)
+}
+
+#[derive(Debug)]
 pub enum NotFoundError {
 	Element(NotFoundErrorData),
 	Attribute(NotFoundErrorData),
@@ -10,11 +15,11 @@ pub enum NotFoundError {
 
 #[derive(Debug)]
 pub struct MultipleNotFoundErrorData {
-	errors: Vec<NotFoundError>
+	errors: Vec<Error>
 }
 
 impl MultipleNotFoundErrorData {
-	pub fn new(errors: Vec<NotFoundError>) -> Self {
+	pub fn new(errors: Vec<Error>) -> Self {
 		Self {
 			errors
 		}
@@ -32,6 +37,16 @@ impl NotFoundErrorData {
 		Self {
 			name_of_not_found: name,
 			in_elem
+		}
+	}
+}
+
+impl fmt::Display for Error {
+	fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+		match self {
+			Error::NotFound(not_found_error) => {
+				not_found_error.fmt(f)
+			}
 		}
 	}
 }

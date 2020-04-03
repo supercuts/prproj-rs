@@ -6,7 +6,7 @@ use libflate::gzip;
 use std::io::Read;
 
 use std::collections::HashMap;
-use crate::errors::{NotFoundError, NotFoundErrorData, MultipleNotFoundErrorData};
+use crate::errors::{Error, NotFoundError, NotFoundErrorData, MultipleNotFoundErrorData};
 use itertools::Itertools;
 
 use super::{PremiereMedia, PremiereSequence, PremiereSequences, Size, Cut, FindWith};
@@ -16,20 +16,28 @@ use std::time::Duration;
 use std::path::Path;
 use std::fs::File;
 
-#[derive(Debug)]
 /// Reads data and produces sequences, media.
 /// ```
-/// use std::path::{Path, PathBuf};
-/// use prproj::PremiereReader;
-/// let xml_file: PathBuf = ["tests", "test.unzipped.prproj"].iter().collect();
+/// # use std::path::{Path, PathBuf};
+/// # use prproj::{PremiereReader, Reader, errors::Error};
+/// # let here: PathBuf = {
+/// #     let mut here = std::env::current_dir().unwrap();
+/// #     here.pop();
+/// #     here
+/// # };
+/// # let xml_file: PathBuf = {
+/// #     let mut here = here.clone();
+/// #     here.push(["test_files", "test.unzipped.prproj"].iter().collect::<PathBuf>());
+/// #     here
+/// # };
 ///
-/// let mut reader = PremiereReader::from_path(&Path::new(&xml_file));
-///	if let Err(err) = reader.read() {
-///        println!("Error reading Premiere Pro file: {}\n{:#?}!", err, err)
-/// }
+/// let mut reader = PremiereReader::from_path(&xml_file);
+/// reader.read()?;
 /// println!("Sequences: {:#?}", reader.sequences());
-/// println!("Media: {:#?}", reader.media())
+/// println!("Media: {:#?}", reader.media());
+/// # Ok::<(), Error>(())
 /// ```
+#[derive(Debug)]
 pub struct PremiereReader {
 	media: RefCell<PremiereMedia>,
 	sequences: PremiereSequences,
@@ -47,19 +55,27 @@ trait HashMapLengthWithVector {
 impl HashMapLengthWithVector for HashMapWithVector {
 	fn length(&self) -> usize {
 		self.values()
-			.fold(
-				0 as usize,
-				|acc: usize, entry: &Vec<String>| acc + entry.len(),
-			)
+		    .fold(
+			    0 as usize,
+			    |acc: usize, entry: &Vec<String>| acc + entry.len(),
+		    )
 	}
 }
 
-impl PremiereReader {
-	pub fn media(&self) -> &RefCell<PremiereMedia> { &self.media }
-	pub fn sequences(&self) -> &Vec<RefCell<PremiereSequence>> {
-		&self.sequences
-	}
-	pub fn new(xml: &[u8]) -> Self {
+pub struct PremiereFile {
+	pub media: Vec<PremiereMedium>,
+	pub sequences: Vec<PremiereSequence>
+}
+
+// Generic over error
+pub trait Reader<T> {
+	fn new(xml: &[u8]) -> Self;
+	fn read(&mut self) -> Result<(), T>;
+	fn take(self) -> PremiereFile;
+}
+
+impl Reader<Error> for PremiereReader {
+	fn new(xml: &[u8]) -> Self {
 		let to_str = |bytes: &[u8]|
 			String::from_utf8(bytes.to_vec()).unwrap();
 
@@ -82,7 +98,7 @@ impl PremiereReader {
 		}
 	}
 
-	pub fn read(&mut self) -> Result<(), NotFoundError> {
+	fn read(&mut self) -> Result<(), Error> {
 		let references: HashMapWithVector = Self::get_sequences(&self.root, &mut self.sequences)?;
 		// Non-lexical lifetime in Vec!
 		// https://rust-lang.github.io/rfcs/2094-nll.html#problem-case-3-conditional-control-flow-across-functions
@@ -91,7 +107,22 @@ impl PremiereReader {
 		// https://stackoverflow.com/questions/38023871/returning-a-reference-from-a-hashmap-or-vec-causes-a-borrow-to-last-beyond-the-s
 		self.resolve_groups(&references)
 	}
+	fn take(mut self) -> PremiereFile {
+		PremiereFile {
+			media: self.media.into_inner().media.into_iter().map(|m| *m).collect(),
+			sequences: self.sequences.into_iter().map(|s| s.into_inner()).collect()
+		}
+	}
+}
 
+impl PremiereReader {
+	pub fn media(&self) -> &RefCell<PremiereMedia> {
+		&self.media
+	}
+
+	pub fn sequences(&self) -> &Vec<RefCell<PremiereSequence>> {
+		&self.sequences
+	}
 	pub fn from_path(path: &Path) -> Self {
 		let mut buffer: Vec<u8> = Vec::new();
 		let mut file = File::open(Path::new(path)).unwrap();
@@ -103,7 +134,7 @@ impl PremiereReader {
 	/// Once it finds one, pushes a `PremiereSequence` to `sequences`.
 	/// Returns `HashMapWithVector`.
 	fn get_sequences(root: &Element, sequences: &mut PremiereSequences)
-	                 -> Result<HashMapWithVector, NotFoundError>
+	                 -> Result<HashMapWithVector, Error>
 	{
 		let mut references: HashMapWithVector = HashMap::new();
 		for child in root.children() {
@@ -123,8 +154,7 @@ impl PremiereReader {
 		&self,
 		vtg: &minidom::element::Element,
 		mut seq: RefMut<PremiereSequence>
-	) -> Result<(), NotFoundError> {
-
+	) -> Result<(), Error> {
 		let (frame_rect_elem, track_group_elem) =
 			Self::get_elems_with_names(
 				vtg,
@@ -190,10 +220,10 @@ impl PremiereReader {
 
 				let media_name: String;
 				let media_path: String;
-				let in_point: usize = start_elem.text().parse().unwrap();
-				let out_point: usize = end_elem.text().parse().unwrap();
-				let frame_rate: usize;
-				let duration: usize;
+				let in_point: u64 = start_elem.text().parse().unwrap();
+				let out_point: u64 = end_elem.text().parse().unwrap();
+				let frame_rate: u64;
+				let duration: u64;
 
 				let (clip_elem, _master_clip_elem, _name_elem) =
 					Self::get_elems_with_names(
@@ -288,9 +318,9 @@ impl PremiereReader {
 	}
 
 
-	fn resolve_groups(&mut self, id_refs: &HashMapWithVector) -> Result<(), NotFoundError> {
+	fn resolve_groups(&mut self, id_refs: &HashMapWithVector) -> Result<(), Error> {
 		let mut groups_to_find: usize = id_refs.length();
-		let mut errors: Vec<NotFoundError> = Vec::new();
+		let mut errors: Vec<Error> = Vec::new();
 		for child in self.root.children() {
 			match child.name() {
 				// Only videos for now, since audio is useless for my use-case
@@ -312,10 +342,12 @@ impl PremiereReader {
 						}
 					} else {
 						errors.push(
-							NotFoundError::Attribute(
-								NotFoundErrorData::new(
-									String::from("ObjectID"),
-									child.to_owned(),
+							Error::NotFound(
+								NotFoundError::Attribute(
+									NotFoundErrorData::new(
+										String::from("ObjectID"),
+										child.to_owned(),
+									)
 								)
 							)
 						)
@@ -343,24 +375,28 @@ impl PremiereReader {
 			Ok(())
 		} else {
 			Err(
-				NotFoundError::Multiple(
-					MultipleNotFoundErrorData::new(
-						errors
+				Error::NotFound(
+					NotFoundError::Multiple(
+						MultipleNotFoundErrorData::new(
+							errors
+						)
 					)
 				)
 			)
 		}
 	}
 
-	fn get_elem_with_id(&self, identifier: &str, find_with: FindWith) -> Result<&Element, NotFoundError> {
+	fn get_elem_with_id(&self, identifier: &str, find_with: FindWith) -> Result<&Element, Error> {
 		if let Some(elem) = self.try_get_elem_with_id(identifier, find_with) {
 			Ok(elem)
 		} else {
 			Err(
-				NotFoundError::Element(
-					NotFoundErrorData::new(
-						format!("With id: \"{}\"", identifier),
-						self.root.clone(),
+				Error::NotFound(
+					NotFoundError::Element(
+						NotFoundErrorData::new(
+							format!("With id: \"{}\"", identifier),
+							self.root.clone(),
+						)
 					)
 				)
 			)
@@ -368,7 +404,7 @@ impl PremiereReader {
 	}
 
 	fn get_elems_with_ids<'a>(&'a self, identifiers: &'a [&'a str], find_with: FindWith)
-	                          -> impl Iterator<Item=&Element> + 'a
+	                          -> impl Iterator<Item = &Element> + 'a
 	{
 		self.root.children().filter(move |elem: &&Element| {
 			if let Some(attr) = elem.attr(find_with.value()) {

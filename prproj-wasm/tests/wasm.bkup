@@ -1,0 +1,36 @@
+#[macro_use]
+extern crate wasm_bindgen_test;
+
+#[cfg(not(target_arch = "wasm32"))]
+#[test]
+fn only_wasm() {
+	panic!("Only works on wasm!")
+}
+
+#[cfg(target_arch = "wasm32")]
+use {
+	prproj_wasm::read_prproj,
+	wasm_bindgen_test::*,
+	std::path::PathBuf,
+	std::fs::File,
+	std::io::Read
+};
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen_test]
+fn works() {
+	let here = {
+		let mut here = std::env::current_dir().unwrap();
+		here.pop();
+		here
+	};
+
+	let xml_file = {
+		let mut here = here.clone();
+		here.push(["test_files", "test.unzipped.prproj"].iter().collect::<PathBuf>());
+		here
+	};
+	let mut vec = Vec::new();
+	File::open(xml_file).unwrap().read_to_end(&mut vec).unwrap();
+	read_prproj(&vec);
+}

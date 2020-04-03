@@ -1,0 +1,38 @@
+[package]
+name = "prproj"
+version = "0.1.0"
+authors = ["Jakub Koralewski <contact@jcubed.me>"]
+edition = "2018"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+# Unpacking gzip
+libflate = "0.1.27"
+# Parsing XML
+minidom = "0.11.1"
+# Easy tuple destructuring when searching for elements
+# fixes nested match statements
+itertools = "0.8.1"
+# For storing duration which can be very big
+# num-bigint = "0.2"
+
+[dev-dependencies]
+lazy_static = "1.4"
+
+#[target.'cfg(target_arch = "wasm32")'.dev-dependencies]
+#wasm-bindgen-test = "0.3"
+
+#[[example]]
+#name = "example"
+#path = "examples/example.rs"
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+wasm-bindgen = "0.2"
+js-sys = "0.3"
+
+#[target.'cfg(target_arch = "wasm32")'.profile.release]
+# Tell `rustc` to optimize for small code size.
+#opt-level = "s"

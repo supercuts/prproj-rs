@@ -1,3 +1,10 @@
+#[cfg(target_arch = "wasm32")]
+use {
+	wasm_bindgen::prelude::*,
+	wasm_bindgen::JsValue
+};
+
+use itertools::Itertools;
 
 /// Is needed despite the Cuts (Vec<Cut>) because
 /// sometimes timeline items overlap partially making only
@@ -6,20 +13,37 @@
 /// The Timeline struct allows to preserve the original times
 /// of cuts, as well as dynamically *fitting* the timeline with
 /// each addition of a Cut.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+// #[cfg_attr(target_arch = "wasm32", derive(Clone))]
 #[derive(Default, Debug)]
 pub struct Timeline {
 	/// Timeline
 	tm: Vec<TimelineItem>
 }
 
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl Timeline {
+	#[wasm_bindgen(getter)]
+	pub fn tm(self) -> js_sys::Array {
+		self.tm
+			.iter()
+			.map(|x| x.clone())
+			.map(JsValue::from)
+			.collect()
+	}
+}
+
 /// Cut is index of the Cut struct with unchanged
 /// start and end times as well as a reference to
 /// the PremiereMedium.
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
+#[cfg_attr(target_arch = "wasm32", derive(Clone))]
 #[derive(Debug, Default)]
 pub struct TimelineItem {
-	cut: usize,
-	start: f64,
-	end: f64,
+	pub cut: usize,
+	pub start: f64,
+	pub end: f64,
 }
 
 impl Timeline {

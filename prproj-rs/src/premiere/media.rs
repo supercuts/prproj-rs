@@ -2,10 +2,25 @@ use std::collections::HashSet;
 use std::hash::{Hash, Hasher};
 use std::time::Duration;
 use super::Size;
+#[cfg(target_arch = "wasm32")]
+use {
+	wasm_bindgen::{
+		prelude::*,
+		JsValue
+	},
+	js_sys::{
+		Object,
+		Reflect
+	},
+	crate::wasm_utils::{
+		WasmDuration,
+		IntoWasm, IntoWasmRef
+	}
+};
 
 #[derive(Debug, Default)]
 pub struct PremiereMedia {
-	media: HashSet<Box<PremiereMedium>>
+	pub media: HashSet<Box<PremiereMedium>>
 }
 
 impl PremiereMedia {
@@ -21,20 +36,38 @@ impl PremiereMedia {
 	}
 }
 
+#[cfg_attr(target_arch = "wasm32", wasm_bindgen)]
 #[derive(Clone, Debug, Default)]
 pub struct PremiereMedium {
-	file_name: String,
-	file_path: String,
-	frame_rate: usize,
+	file_name: String, // TODO: impl
+	file_path: String, // TODO: impl
+	pub frame_rate: u64,
 	duration: Duration,
-	size: Size,
+	pub size: Size,
+}
+
+#[cfg(target_arch = "wasm32")]
+#[wasm_bindgen]
+impl PremiereMedium {
+	#[wasm_bindgen(getter)]
+	pub fn fileName(&self) -> JsValue {
+		JsValue::from_str(&self.file_name)
+	}
+	#[wasm_bindgen(getter)]
+	pub fn filePath(&self) -> JsValue {
+		JsValue::from_str(&self.file_path)
+	}
+	#[wasm_bindgen(getter)]
+	pub fn duration(&self) -> JsValue {
+		self.duration.borrow_wasm()
+	}
 }
 
 impl PremiereMedium {
 	pub fn new(
 		file_name: String,
 		file_path: String,
-		frame_rate: usize,
+		frame_rate: u64,
 		duration: Duration,
 		size: Size,
 	) -> Self {
