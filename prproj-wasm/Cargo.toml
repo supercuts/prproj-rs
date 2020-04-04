@@ -18,6 +18,6 @@ wasm-bindgen-test = "0.3"
 wasm-bindgen-test-macro = "0.3"
 
 [profile.release]
-opt-level = "s"
-debug = true
+opt-level = 3
+#debug = true
 

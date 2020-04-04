@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist/",
+    "module": "commonjs",
+    "target": "es5",
+    "allowJs": true,
+    "moduleResolution": "node",
+    "esModuleInterop" : true,
+    "allowSyntheticDefaultImports" : true,
+    "lib": [
+      "dom",
+      "dom.iterable"
+    ],
+    "declaration": true
+  },
+  "include": [
+    "../../prproj-ts"
+  ],
+  "exclude": [
+    "../../prproj-ts/example"
+  ]
+}

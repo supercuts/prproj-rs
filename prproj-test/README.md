@@ -41,7 +41,7 @@ npm init wasm-app
 - `LICENSE-APACHE` and `LICENSE-MIT`: most Rust projects are licensed this way, so these are included for you
 - `README.md`: the file you are reading now!
 - `index.html`: a bare bones html document that includes the webpack bundle
-- `index.js`: example js file with a comment showing how to import and use a wasm pkg
+- `index.ts`: example js file with a comment showing how to import and use a wasm pkg
 - `package.json` and `package-lock.json`:
   - pulls in devDependencies for using webpack:
       - [`webpack`](https://www.npmjs.com/package/webpack)
